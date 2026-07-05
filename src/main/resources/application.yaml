@@ -1,0 +1,24 @@
+server:
+  servlet:
+    context-path: /api/v1
+
+spring:
+  application:
+    name: citasalud-service
+  datasource:
+    url: jdbc:h2:mem:citasalud;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  h2:
+    console:
+      enabled: true
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+      data-locations: classpath:db/data.sql
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false

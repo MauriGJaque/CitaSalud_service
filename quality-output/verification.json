@@ -1,0 +1,91 @@
+{
+  "proyecto": "citasalud-service",
+  "version": "0.0.1-SNAPSHOT",
+  "fecha": "2026-07-04",
+  "commit": "e2ddc52",
+  "tests": {
+    "comando": "./gradlew test jacocoTestReport",
+    "passed": 29,
+    "total": 29,
+    "coverage": 97.4,
+    "coverage_fuente": "build/reports/jacoco/test/jacocoTestReport.xml (report-level <counter type=\"LINE\" missed=\"8\" covered=\"302\"/> => 302/310 = 97.4%)"
+  },
+  "security": {
+    "fuente": "Semgrep CLI (uvx semgrep --config=auto, 343 reglas, sobre src/main/java) + grep de secretos en src/main y application.yaml",
+    "critical": 0,
+    "high": 1,
+    "secrets": 0,
+    "hallazgos": [
+      {
+        "severidad": "high",
+        "regla": "revision-manual (no-semgrep-rule)",
+        "archivo": "src/main/java/org/ups/citasalud/booking/adapter/in/web/CitasController.java",
+        "linea": 25,
+        "nota": "No existe dependencia spring-boot-starter-security en build.gradle ni ninguna SecurityFilterChain en el proyecto: los endpoints de CitasController (POST /citas, POST /franjas/{id}/seleccion, GET /medicos/{id}/franjas) quedan expuestos sin autenticación. El spec.md (Assumptions) declara que la autenticación se resuelve fuera de esta historia via 'mecanismo estándar ya existente del sistema', por lo que no se cuenta como incumplimiento de un FR-xxx, pero se reporta para que el equipo confirme dónde vive ese mecanismo (gateway u otro servicio) antes de exponer el servicio en producción."
+      }
+    ]
+  },
+  "spec": "specs/001-reserva-cita-online/spec.md",
+  "criteria": [
+    {
+      "id": "FR-001",
+      "fuente": "spec.md · FR-001 (reservar en línea sin restricción de horario telefónico)",
+      "status": "cumple",
+      "evidencia": "src/test/resources/features/reserva_cita.feature escenario 'Reserva exitosa fuera de horario telefónico' + step queElPacienteAccedeFueraDeHorarioTelefonico (comentario 'FR-001: el sistema no impone restricción horaria') en ReservaCitaStepDefinitions.java:66-69, ejecutado end-to-end vía CucumberFunctionalTest (PASA, 3/3 escenarios)."
+    },
+    {
+      "id": "FR-002",
+      "fuente": "spec.md · FR-002 (elegir médico, fecha y hora entre franjas disponibles antes de confirmar)",
+      "status": "cumple",
+      "evidencia": "ReservaCitaControllerIT.listarFranjasDisponiblesRespondeConLasFranjasDelMedico y seleccionarFranjaExitosaResponde200ConFranjaRetenida (PASAN); ConsultarDisponibilidadUseCase.java:12 comentado 'FR-002, FR-007'."
+    },
+    {
+      "id": "FR-003",
+      "fuente": "spec.md · FR-003 (registrar la cita solo cuando el paciente confirma explícitamente)",
+      "status": "cumple",
+      "evidencia": "ReservarCitaUseCaseTest.reservaExitosaRegistraCitaConfirmadaYNotifica y ReservaCitaControllerIT.reservarCitaExitosaResponde201ConCitaConfirmada (PASAN); combinado con LiberarFranjaRetenidaUseCaseTest que muestra que una selección sin confirmar (RETENIDA) no crea una Cita."
+    },
+    {
+      "id": "FR-004",
+      "fuente": "spec.md · FR-004 (enviar confirmación por WhatsApp inmediatamente después de registrar la cita)",
+      "status": "cumple",
+      "evidencia": "WhatsAppNotificacionAdapterTest.enviarConfirmacionConNumeroValidoRetornaTrue (PASA) + ReservarCitaUseCaseTest.reservaExitosaRegistraCitaConfirmadaYNotifica verifica notificacionPort.enviarConfirmacion(...) invocado (PASA)."
+    },
+    {
+      "id": "FR-005",
+      "fuente": "spec.md · FR-005 (impedir que una franja ocupada sea confirmada por otro paciente)",
+      "status": "cumple",
+      "evidencia": "ReservarCitaUseCaseTest.franjaYaOcupadaPropagaFranjaNoDisponibleException, ReservaCitaControllerIT.reservarCitaSobreFranjaOcupadaResponde409, y CitaRepositoryAdapterIT.noPermiteDosFranjasParaElMismoMedicoYMismoInstante (restricción de unicidad real en BD) — todas PASAN."
+    },
+    {
+      "id": "FR-006",
+      "fuente": "spec.md · FR-006 (invitar a elegir otra franja cuando la elegida ya no está disponible)",
+      "status": "cumple",
+      "evidencia": "ReservaCitaStepDefinitions.loInvitaAElegirOtraFranja verifica codigo=FRANJA_NO_DISPONIBLE en la respuesta 409 (escenario Cucumber 'Franja ya ocupada', PASA)."
+    },
+    {
+      "id": "FR-007",
+      "fuente": "spec.md · FR-007 / Edge Case 4 (rechazar franja pasada o fuera del horario del médico)",
+      "status": "incumple",
+      "evidencia": "build/reports/jacoco/test/jacocoTestReport.xml: en el <sourcefile name=\"ReservarCitaUseCase.java\"> la línea 60 (el 'throw new ReservaInvalidaException(...)' dentro del if de FR-007, ReservarCitaUseCase.java:59-61) tiene missedInstr=7/coveredInstr=0, y la línea 59 (la condición) tiene 2 ramas cubiertas de 4 (branch coverage 50%): ninguna prueba ejecuta el camino real de rechazo. El único test relacionado, ReservaCitaFranjaInvalidaControllerIT.franjaPasadaOFueraDeHorarioResponde422, usa @WebMvcTest con ReservarCitaUseCase mockeado (thenThrow manual de ReservaInvalidaException) — verifica solo el mapeo HTTP 422 en ApiExceptionHandler, no la lógica de negocio real que decide el rechazo. MedicoTest y FranjaHorariaTest prueban esFutura()/atiendeEn() de forma aislada, pero ningún test invoca ReservarCitaUseCase.ejecutar() con una franja realmente pasada o fuera de horario para comprobar que el use case efectivamente lanza la excepción."
+    },
+    {
+      "id": "FR-008",
+      "fuente": "spec.md · FR-008 / Edge Case 1 (concurrencia: solo una reserva se confirma)",
+      "status": "cumple",
+      "evidencia": "ReservaCitaConcurrenciaIT.dosSolicitudesConcurrentesSobreLaMismaFranjaSoloUnaSeConfirma (SpringBootTest de extremo a extremo con 2 hilos concurrentes reales sobre la misma franja, PASA: assertThat(estados).containsExactlyInAnyOrder(CREATED, CONFLICT)) + restricción de unicidad en BD (CitaRepositoryAdapterIT)."
+    },
+    {
+      "id": "FR-009",
+      "fuente": "spec.md · FR-009 / Edge Case 2 (reserva válida aun si falla el envío de WhatsApp)",
+      "status": "cumple",
+      "evidencia": "ReservarCitaUseCaseNotificacionFallidaTest.reservaSiguesConfirmadaCuandoNotificacionFalla (PASA: cita queda CONFIRMADA con notificacionEnviada=false) + WhatsAppNotificacionAdapterTest.enviarConfirmacionConNumeroInvalidoRetornaFalseSinLanzarExcepcion (PASA)."
+    },
+    {
+      "id": "FR-010",
+      "fuente": "spec.md · FR-010 / Edge Case 3 (liberar franja retenida no confirmada tras 5 minutos)",
+      "status": "cumple",
+      "evidencia": "LiberarFranjaRetenidaUseCaseTest.franjaRetenidaExpiradaSeLiberaYSePersiste y franjaRetenidaVigenteNoSeLibera (PASAN) + escenario Cucumber 'Liberación automática de franja retenida' con MutableTestClock avanzando 5:01 min (PASA)."
+    }
+  ]
+}

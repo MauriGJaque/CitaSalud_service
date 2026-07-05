@@ -1,0 +1,181 @@
+openapi: 3.0.3
+info:
+  title: Citasalud - API de Reserva de Citas
+  description: >
+    Contrato para la reserva en línea de citas médicas (US-01, épica E-01).
+    Fuente de verdad para la generación del código de servidor vía
+    openapi-generator (Principio IV de la constitución del proyecto).
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /medicos/{medicoId}/franjas:
+    get:
+      operationId: listarFranjasDisponibles
+      summary: Lista las franjas horarias disponibles de un médico
+      tags: [Disponibilidad]
+      parameters:
+        - name: medicoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: desde
+          in: query
+          description: Fecha/hora mínima (inclusive) a considerar; por defecto, el momento actual
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Franjas disponibles encontradas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FranjaHoraria'
+        '404':
+          description: Médico no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /franjas/{franjaId}/seleccion:
+    post:
+      operationId: seleccionarFranja
+      summary: >
+        Marca una franja DISPONIBLE como RETENIDA por 5 minutos mientras el
+        paciente confirma (FR-010). Si no se confirma dentro de ese plazo,
+        la franja vuelve a DISPONIBLE.
+      tags: [Disponibilidad]
+      parameters:
+        - name: franjaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Franja retenida exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FranjaHoraria'
+        '409':
+          description: La franja ya no está DISPONIBLE (ocupada o retenida por otro paciente)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /citas:
+    post:
+      operationId: reservarCita
+      summary: Reserva una cita para un paciente en una franja horaria disponible
+      tags: [Reservas]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaCitaRequest'
+      responses:
+        '201':
+          description: Cita registrada y notificación de confirmación disparada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cita'
+        '409':
+          description: >
+            La franja horaria seleccionada ya no está disponible
+            (FR-005/FR-006). El cliente debe volver a consultar
+            /medicos/{medicoId}/franjas y elegir otra franja.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: >
+            La franja seleccionada no es futura o está fuera del horario
+            de atención del médico (FR-007)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    FranjaHoraria:
+      type: object
+      required: [id, medicoId, fechaHoraInicio, fechaHoraFin, estado]
+      properties:
+        id:
+          type: string
+          format: uuid
+        medicoId:
+          type: string
+          format: uuid
+        fechaHoraInicio:
+          type: string
+          format: date-time
+        fechaHoraFin:
+          type: string
+          format: date-time
+        estado:
+          type: string
+          enum: [DISPONIBLE, RETENIDA, OCUPADA]
+
+    ReservaCitaRequest:
+      type: object
+      required: [pacienteId, medicoId, franjaHorariaId]
+      properties:
+        pacienteId:
+          type: string
+          format: uuid
+        medicoId:
+          type: string
+          format: uuid
+        franjaHorariaId:
+          type: string
+          format: uuid
+
+    Cita:
+      type: object
+      required: [id, pacienteId, medicoId, franjaHorariaId, estado, notificacionEnviada, creadaEn]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pacienteId:
+          type: string
+          format: uuid
+        medicoId:
+          type: string
+          format: uuid
+        franjaHorariaId:
+          type: string
+          format: uuid
+        estado:
+          type: string
+          enum: [CONFIRMADA]
+        notificacionEnviada:
+          type: boolean
+          description: Refleja si la confirmación por WhatsApp fue entregada (FR-009)
+        creadaEn:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required: [codigo, mensaje]
+      properties:
+        codigo:
+          type: string
+        mensaje:
+          type: string
